@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<response>
+    <header>
+        <resultCode>00</resultCode>
+        <resultMsg>NORMAL SERVICE.</resultMsg>
+    </header>
+    <body>
+        <count>
+            <numOfRows>3</numOfRows>
+            <pageNo>1</pageNo>
+            <totalCount>37</totalCount>
+        </count>
+        <items>
+            <item>
+                <applicationNumber>1020210012345</applicationNumber>
+                <inventionTitle>학습률 스케줄링을 이용한 신경망 학습 방법 및 장치</inventionTitle>
+                <applicantName>주식회사 에이아이테크</applicantName>
+                <applicationDate>20210128</applicationDate>
+                <openDate>20220803</openDate>
+                <registerStatus>공개</registerStatus>
+                <astrtCont>본 발명은 신경망 학습 시 학습률을 주기적으로 조절하는 스케줄링 방법에 관한 것으로, 학습 초기에는 큰 학습률을 적용하고 이후 주기적으로 학습률을 감소시켜 수렴 속도를 개선하는 것을 특징으로 한다.</astrtCont>
+                <ipcNumber>G06N 3/08|G06N 3/04</ipcNumber>
+            </item>
+            <item>
+                <applicationNumber>1020200098765</applicationNumber>
+                <inventionTitle>모바일 환경을 위한 경량 신경망 모델 압축 방법</inventionTitle>
+                <applicantName>한국전자기술연구원</applicantName>
+                <applicationDate>20200812</applicationDate>
+                <openDate>20220215</openDate>
+                <registerStatus>등록</registerStatus>
+                <astrtCont>본 발명은 모바일 디바이스의 제한된 연산 자원에서 신경망 모델을 실행하기 위한 가중치 양자화 및 가지치기 기반 모델 압축 방법을 제공한다. 압축된 모델은 추론 속도를 향상시키면서 정확도 손실을 최소화한다.</astrtCont>
+                <ipcNumber>G06N 3/063</ipcNumber>
+            </item>
+            <item>
+                <applicationNumber>1020190054321</applicationNumber>
+                <inventionTitle>적응형 옵티마이저를 적용한 기계학습 시스템</inventionTitle>
+                <applicantName>대학교산학협력단</applicantName>
+                <applicationDate>20190507</applicationDate>
+                <openDate>20201118</openDate>
+                <registerStatus>공개</registerStatus>
+                <astrtCont>본 발명은 기계학습 모델의 학습 과정에서 가중치 갱신 규칙을 데이터 분포에 따라 적응적으로 변경하는 옵티마이저를 포함하는 시스템에 관한 것이다.</astrtCont>
+                <ipcNumber>G06N 20/00</ipcNumber>
+            </item>
+        </items>
+    </body>
+</response>
