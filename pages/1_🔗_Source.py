@@ -88,7 +88,17 @@ with github_tab:
     files = st.session_state.get("github_files")
     connector = st.session_state.get("connector")
     if files and isinstance(connector, GitHubConnector):
-        path = st.selectbox("분석할 파일", files, key="gh_path")
+        keyword = st.text_input(
+            "파일 경로 검색", key="gh_filter",
+            placeholder="예: technical_report  /  communication  /  final",
+            help="경로에 포함된 문자열로 목록을 좁힙니다.",
+        )
+        candidates = [f for f in files if keyword.lower() in f.lower()] if keyword else files
+        st.caption(f"{len(candidates)} / {len(files)}개 파일")
+        if not candidates:
+            st.warning("검색 결과가 없습니다. 다른 키워드를 입력해주세요.")
+            st.stop()
+        path = st.selectbox("분석할 파일", candidates, key="gh_path")
         if st.button("커밋 목록 불러오기", key="gh_commits"):
             try:
                 st.session_state.github_revisions = connector.list_commits(path)

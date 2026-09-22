@@ -500,7 +500,14 @@ POST /api/search/queries
 POST /api/prior-art/search
 ```
 
-KIPRIS Plus OpenAPI(`getWordSearch` / `getAdvancedSearch`)를 호출하고, XML 응답을 정규화하여 반환합니다. 동일 검색어의 결과는 `kipris_cache`에서 재사용합니다.
+KIPRIS Plus OpenAPI를 호출하고, XML 응답을 정규화하여 반환합니다. 동일 검색어의 결과는 `kipris_cache`에서 재사용합니다.
+
+```
+GET https://plus.kipris.or.kr/kipo-api/kipi/patUtiModInfoSearchSevice/getWordSearch
+    ?word={검색어}&numOfRows={N}&pageNo=1&patent=true&utility=true&ServiceKey={키}
+```
+
+실측으로 확정한 규격입니다. 인증 파라미터는 `ServiceKey`(≠`accessKey`), 페이징은 `numOfRows`/`pageNo`(`docsStart`/`docsCount`는 무시)를 사용합니다.
 
 **Request:**
 ```json
@@ -1537,7 +1544,9 @@ KIPRIS는 **XML**로 응답하므로 `xmltodict` 파싱 후 아래 규칙으로 
 | `body/count/totalCount` | `total_found` | |
 
 > [!NOTE]
-> 필드명은 KIPRIS Plus 서비스·버전에 따라 다를 수 있으므로, 매핑은 `_normalize_item()` 한 곳에만 두고 나머지 코드는 내부 모델만 사용합니다. 누락 필드는 예외 대신 빈 문자열로 처리합니다.
+> 위 필드명은 실제 응답으로 확인했습니다(`applicantName`, `applicationDate`, `applicationNumber`, `astrtCont`, `inventionTitle`, `ipcNumber`, `openDate`, `registerStatus`, `registerDate`, `drawing` 등).
+> 서비스·버전에 따라 달라질 수 있으므로 매핑은 `_normalize_item()` 한 곳에만 두고, 누락 필드는 예외 대신 빈 문자열로 처리합니다.
+> 상세 링크는 `khome/search/detail.do`가 404이므로 `kpat.kipris.or.kr/kpat/biblioa.do?method=biblioFrame&applno=…`를 사용합니다.
 
 ---
 
@@ -1631,6 +1640,7 @@ class KiprisError(PatentAgentError):
 | E6004 | XML 파싱 실패 | (내부 처리) | 원문 로깅 후 빈 결과 반환, 신고서는 "조사 미실시"로 생성 |
 | E6005 | 검색 결과 0건 | "유사 선행기술이 검색되지 않았습니다 — 신규성 확보 가능성이 있습니다" | 정보성 안내 + 검색어 완화 제안 |
 | E6006 | 타임아웃 | "KIPRIS 응답이 지연되고 있습니다. 재시도합니다" | 3회 재시도 → 실패 시 건너뛰기 허용 |
+| E6007 | 키 사용기간 만료 (`resultCode=31`) | "Service Key 사용 기간이 만료되었습니다" | 샘플 데이터로 자동 우회 + 배지 표시 |
 
 ### 6.3 Retry & Fallback 전략
 

@@ -43,6 +43,8 @@ GITHUB_DEFAULT_REPO = os.getenv("GITHUB_DEFAULT_REPO", "")
 
 # ─── Google Drive ──────────────────────────────────────
 GDRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+# API 키 모드: 링크 공개된 파일만 접근 가능 (폴더 탐색·리비전 조회는 불가)
+GDRIVE_API_KEY = os.getenv("GDRIVE_API_KEY", "")
 GDRIVE_CREDENTIALS_PATH = BASE_DIR / os.getenv(
     "GDRIVE_CREDENTIALS_PATH", "data/credentials/service_account.json"
 )
@@ -54,14 +56,18 @@ GDRIVE_DEFAULT_FOLDER_ID = os.getenv("GDRIVE_DEFAULT_FOLDER_ID", "")
 # ─── KIPRIS ────────────────────────────────────────────
 # NOTE: 서비스명/오퍼레이션명은 KIPRIS Plus 명세서 기준으로 확정할 것.
 #       응답 필드 매핑은 KiprisClient._normalize_item() 한 곳에만 둔다.
-KIPRIS_API_BASE = "http://plus.kipris.or.kr/openapi/rest"
-KIPRIS_SERVICE = "patUtiliModInfoSearchSevice"
+# 실측 확인 (2026-09): 서비스 경로는 patUtiModInfoSearchSevice — "Utili"가 아니라 "Uti"
+KIPRIS_API_BASE = "https://plus.kipris.or.kr/kipo-api/kipi"
+KIPRIS_SERVICE = "patUtiModInfoSearchSevice"
 KIPRIS_SERVICE_KEY = os.getenv("KIPRIS_SERVICE_KEY", "")
 KIPRIS_MAX_RESULTS = _int(os.getenv("KIPRIS_MAX_RESULTS"), 10)
 KIPRIS_OFFLINE = _bool(os.getenv("KIPRIS_OFFLINE"), False)
 KIPRIS_TIMEOUT = 10
 KIPRIS_MAX_RETRIES = 3
-KIPRIS_DETAIL_URL = "https://www.kipris.or.kr/khome/search/detail.do?applicationNumber={app_no}"
+# 발급 키의 총 호출 한도 — 사이드바 경고 기준으로만 사용한다
+KIPRIS_CALL_BUDGET = _int(os.getenv("KIPRIS_CALL_BUDGET"), 1000)
+# 실측 확인: khome/search/detail.do 는 404, kpat 서지 프레임이 정상 응답
+KIPRIS_DETAIL_URL = "http://kpat.kipris.or.kr/kpat/biblioa.do?method=biblioFrame&applno={app_no}"
 
 # ─── 공통 ──────────────────────────────────────────────
 SUPPORTED_EXT = {".md", ".txt", ".pdf", ".pptx", ".docx"}

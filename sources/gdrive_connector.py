@@ -22,12 +22,15 @@ _EXPORT_MAP = {
 class GDriveConnector(SourceConnector):
     source_type = "gdrive"
 
-    def __init__(self, credentials_path=None, token_path=None, folder_id: str = ""):
+    def __init__(self, credentials_path=None, token_path=None, folder_id: str = "", api_key: str | None = None):
         super().__init__()
         self.credentials_path = credentials_path or settings.GDRIVE_CREDENTIALS_PATH
         self.token_path = token_path or settings.GDRIVE_TOKEN_PATH
         self.folder_id = folder_id or settings.GDRIVE_DEFAULT_FOLDER_ID
+        self.api_key = settings.GDRIVE_API_KEY if api_key is None else api_key
         self.service = None
+        # 자격 증명 없이 API 키만 있는 경우 True — 링크 공개 파일만 다룰 수 있다.
+        self.api_key_mode = False
         self._file_meta: dict[str, DriveFile] = {}
 
     # ─── 인증 ──────────────────────────────────────────
@@ -42,7 +45,18 @@ class GDriveConnector(SourceConnector):
                 "E0001",
             ) from exc
 
+        from pathlib import Path as _Path
+
+        if not _Path(self.credentials_path).exists() and self.api_key:
+            # 서비스 계정/OAuth 자격 증명이 없으면 API 키로 동작한다.
+            self.api_key_mode = True
+            self.service = build(
+                "drive", "v3", developerKey=self.api_key, cache_discovery=False
+            )
+            return True
+
         credentials = self._load_credentials()
+        self.api_key_mode = False
         self.service = build("drive", "v3", credentials=credentials, cache_discovery=False)
         return True
 
@@ -54,7 +68,9 @@ class GDriveConnector(SourceConnector):
 
         if not cred_path.exists():
             raise SourceError(
-                f"Google Drive 인증 정보를 찾을 수 없습니다: {cred_path}", "E0001"
+                "Google Drive 인증 정보를 찾을 수 없습니다. 폴더 탐색과 리비전 비교에는 "
+                f"서비스 계정 키(JSON) 또는 OAuth 클라이언트가 필요합니다: {cred_path}",
+                "E0001",
             )
 
         # 1) 서비스 계정 키
@@ -102,6 +118,12 @@ class GDriveConnector(SourceConnector):
         self.authenticate()
         if not folder_id:
             raise SourceError("Drive 폴더 ID가 지정되지 않았습니다.", "E0003")
+        if self.api_key_mode:
+            raise SourceError(
+                "API 키로는 폴더 목록을 조회할 수 없습니다. 서비스 계정 키를 등록하거나, "
+                "링크 공개된 파일의 ID를 직접 입력해주세요.",
+                "E0002",
+            )
         try:
             response = (
                 self.service.files()
@@ -137,6 +159,12 @@ class GDriveConnector(SourceConnector):
     def list_revisions(self, target: str) -> list[Revision]:
         """target = Drive file_id"""
         self.authenticate()
+        if self.api_key_mode:
+            raise SourceError(
+                "API 키로는 리비전 이력을 조회할 수 없습니다(소유자 권한 필요). "
+                "서비스 계정 키를 등록하거나, 서로 다른 두 공개 파일을 비교해주세요.",
+                "E0002",
+            )
         try:
             response = (
                 self.service.revisions()

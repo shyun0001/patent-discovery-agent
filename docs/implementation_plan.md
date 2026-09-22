@@ -53,12 +53,16 @@
 | **대상 DB** | 국내 특허 / 실용신안 (공개 + 등록) |
 | **인증** | 회원가입 후 발급받는 **Service Key** (`.env`에 보관) |
 | **비용** | 무료 — 단, 서비스별 **일일 호출 한도**가 있으므로 결과를 SQLite에 캐싱 |
+| **엔드포인트** | `https://plus.kipris.or.kr/kipo-api/kipi/patUtiModInfoSearchSevice/{operation}` (실측 확인) |
+| **인증 파라미터** | `ServiceKey` (※ `accessKey`는 인식되지 않음) |
+| **페이징** | `numOfRows` / `pageNo` (※ `docsStart`/`docsCount`는 무시됨) |
 | **호출 방식** | REST `GET`, 응답은 **XML** → `xmltodict`로 파싱 후 내부 JSON 모델로 정규화 |
 | **사용 오퍼레이션** | `getWordSearch` (자유 키워드 검색), `getAdvancedSearch` (발명의명칭·초록·IPC 등 필드 지정 검색) |
 | **가져오는 데이터** | 출원번호, 발명의 명칭, 출원인, 출원일/공개일, 등록상태, 초록(`astrtCont`), IPC 코드, KIPRIS 상세 링크 |
 
 > [!NOTE]
-> 오퍼레이션명·파라미터명은 KIPRIS Plus 계정 발급 후 제공되는 **API 명세서 기준으로 최종 확인**합니다. 구현 시 응답 파싱 계층(`_normalize_item`)만 수정하면 되도록 클라이언트를 분리해 둡니다.
+> 서비스 경로는 `patUtiModInfoSearchSevice`입니다 — `patUtili…`로 쓰면 `31 DEADLINE_HAS_EXPIRED_ERROR`가 반환되어 키 만료로 오인하기 쉽습니다.
+> 응답 필드 매핑은 `_normalize_item()` 한 곳에만 두어, 명세가 달라지면 그 함수만 수정하면 됩니다.
 
 #### KIPRIS 검색 흐름
 1. F5에서 생성된 검색어(`primary_kr`, `secondary_kr`, `boolean_query`, IPC 코드) 확보

@@ -21,6 +21,8 @@ class LLMClient:
         self.default_model = default_model or settings.MODEL_SECONDARY
         self._client = None
         self.last_call_cached = False
+        # 실제 과금되는 호출만 누적한다 (캐시 히트는 cached 로만 센다).
+        self.usage = {"calls": 0, "cached": 0, "prompt_tokens": 0, "completion_tokens": 0}
 
     # ─── 내부 ──────────────────────────────────────────
     def _ensure_client(self):
@@ -48,6 +50,7 @@ class LLMClient:
         for attempt in range(settings.LLM_MAX_RETRIES):
             try:
                 response = client.chat.completions.create(**kwargs)
+                self._record_usage(response)
                 return response.choices[0].message.content or ""
             except Exception as exc:  # openai 예외 타입에 의존하지 않는다
                 last_error = exc
@@ -70,6 +73,7 @@ class LLMClient:
         cached = repository.get_cache(key)
         if cached is not None:
             self.last_call_cached = True
+            self.usage["cached"] += 1
             return cached
 
         self.last_call_cached = False
@@ -87,6 +91,7 @@ class LLMClient:
         cached = repository.get_cache(key)
         if cached is not None:
             self.last_call_cached = True
+            self.usage["cached"] += 1
             try:
                 return self._parse_json(cached)
             except LLMError:
@@ -103,6 +108,14 @@ class LLMClient:
 
         repository.set_cache(key, prompt, raw, model)
         return parsed
+
+    def _record_usage(self, response) -> None:
+        self.usage["calls"] += 1
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return
+        self.usage["prompt_tokens"] += getattr(usage, "prompt_tokens", 0) or 0
+        self.usage["completion_tokens"] += getattr(usage, "completion_tokens", 0) or 0
 
     @staticmethod
     def _parse_json(raw: str) -> dict:

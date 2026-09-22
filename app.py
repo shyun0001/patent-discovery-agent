@@ -67,6 +67,18 @@ with st.sidebar:
     if rate:
         st.caption(f"GitHub rate limit: {rate['remaining']}/{rate['limit']}")
 
+    st.divider()
+    st.subheader("💰 사용량")
+    usage = pipeline().llm.usage
+    st.caption(f"LLM 실호출 {usage['calls']}회 · 캐시 적중 {usage['cached']}회")
+    st.caption(
+        f"토큰 입력 {usage['prompt_tokens']:,} / 출력 {usage['completion_tokens']:,}"
+    )
+    kipris_calls = repository.count_kipris_calls()
+    st.caption(f"KIPRIS 실호출 {kipris_calls} / {settings.KIPRIS_CALL_BUDGET}회")
+    if kipris_calls > settings.KIPRIS_CALL_BUDGET * 0.8:
+        st.warning("KIPRIS 호출 한도의 80%를 넘었습니다.")
+
 # ─── 본문 ──────────────────────────────────────────────
 if not st.session_state.get("project_id"):
     st.warning("좌측 사이드바에서 프로젝트를 먼저 생성하거나 선택해주세요.")

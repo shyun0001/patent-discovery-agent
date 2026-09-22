@@ -42,6 +42,19 @@ def _format_date(raw: str) -> str:
     return raw
 
 
+# KIPRIS resultCode → (내부 에러코드, 사용자 메시지)
+_RESULT_CODES = {
+    "10": ("E6002", "요청 파라미터가 올바르지 않습니다 (Service Key 누락 포함)."),
+    "30": ("E6002", "등록되지 않은 Service Key입니다."),
+    "31": (
+        "E6007",
+        "KIPRIS Service Key의 사용 기간이 만료되었습니다. "
+        "plus.kipris.or.kr에서 서비스 사용 기간을 연장하거나 재신청해주세요.",
+    ),
+    "32": ("E6003", "KIPRIS 일일 호출 한도를 초과했습니다."),
+}
+
+
 def _split_ipc(raw: str) -> list[str]:
     if not raw:
         return []
@@ -106,10 +119,13 @@ class KiprisClient:
             return [PatentDocument(**item) for item in cached["results"]]
 
         self.last_call_cached = False
-        xml_text = self._load_sample_response() if self.offline else self._call_api(operation, params)
-        items = self._parse_xml(xml_text)
+        if self.offline:
+            items = self._parse_xml(self._load_sample_response())
+        else:
+            items = self._search_live(operation, params)
         documents = []
-        for index, item in enumerate(items, start=1):
+        limit = int(params.get("numOfRows") or params.get("docsCount") or settings.KIPRIS_MAX_RESULTS)
+        for index, item in enumerate(items[:limit], start=1):
             doc = self._normalize_item(item)
             doc.rank = index
             doc.is_sample = self.offline
@@ -119,6 +135,18 @@ class KiprisClient:
             key, query_label, [asdict(d) for d in documents], self.last_total_found
         )
         return documents
+
+    def _search_live(self, operation: str, params: dict) -> list[dict]:
+        """실측 규격은 numOfRows/pageNo. 서비스별로 docsStart/docsCount를 쓰는 경우 1회 대체 시도한다."""
+        try:
+            return self._parse_xml(self._call_api(operation, params))
+        except KiprisError as exc:
+            if exc.error_code != "E6002" or "resultCode=10" not in str(exc):
+                raise
+            alt = {k: v for k, v in params.items() if k not in ("numOfRows", "pageNo")}
+            alt["docsStart"] = 1
+            alt["docsCount"] = params.get("numOfRows", settings.KIPRIS_MAX_RESULTS)
+            return self._parse_xml(self._call_api(operation, alt))
 
     def _call_api(self, operation: str, params: dict) -> str:
         if not self.service_key:
@@ -165,10 +193,22 @@ class KiprisClient:
         root = parsed.get("response") or next(iter(parsed.values()), {}) or {}
         header = root.get("header") or {}
         result_code = _text(header.get("resultCode"))
-        if result_code and result_code not in ("00", "0"):
-            message = _text(header.get("resultMsg")) or "알 수 없는 오류"
-            code = "E6003" if "한도" in message or "LIMIT" in message.upper() else "E6002"
-            raise KiprisError(f"KIPRIS 오류: {message} (resultCode={result_code})", code)
+        success = _text(header.get("successYN")).upper()
+        if (result_code and result_code not in ("00", "0")) or success == "N":
+            raw_message = _text(header.get("resultMsg")) or "알 수 없는 오류"
+            code, message = _RESULT_CODES.get(result_code, (None, None))
+            if code is None:
+                upper = raw_message.upper()
+                if "LIMIT" in upper or "한도" in raw_message:
+                    code = "E6003"
+                elif "EXPIRED" in upper:
+                    code = "E6007"
+                else:
+                    code = "E6002"
+                message = raw_message
+            raise KiprisError(
+                f"{message} (resultCode={result_code} {raw_message})", code
+            )
 
         body = root.get("body") or {}
         count = body.get("count") or {}

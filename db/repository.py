@@ -408,6 +408,13 @@ def set_kipris_cache(query_hash: str, query: str, results: list[dict], result_co
         )
 
 
+def count_kipris_calls() -> int:
+    """캐시에 적립된 검색어 수 = 실제 API를 호출한 횟수 (한도 감시용)."""
+    with connect() as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM kipris_cache").fetchone()
+    return row["n"] if row else 0
+
+
 def clear_kipris_cache(query_hash: str) -> None:
     with connect() as conn:
         conn.execute("DELETE FROM kipris_cache WHERE query_hash = ?", (query_hash,))

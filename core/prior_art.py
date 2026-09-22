@@ -24,6 +24,8 @@ class PriorArtAnalyzer:
         self.prompts = prompts or PromptManager()
         self.last_used_queries: list[str] = []
         self.last_total_found = 0
+        # 키 오류로 샘플 모드로 우회했을 때 사용자에게 알릴 문구
+        self.fallback_notice = ""
 
     # ─── 검색 ──────────────────────────────────────────
     def search_prior_art(
@@ -143,17 +145,26 @@ class PriorArtAnalyzer:
         max_results: int | None = None,
     ) -> PriorArtSummary:
         """검색 → 평가 → 요약을 한 번에. KIPRIS 실패 시에도 파이프라인은 계속된다."""
+        self.fallback_notice = ""
         try:
             patents = self.search_prior_art(queries, max_results=max_results)
         except KiprisError as exc:
             if exc.error_code == "E6005":
                 patents = []
+            elif exc.error_code in ("E6001", "E6002", "E6007") and not self.kipris.offline:
+                # 키 미설정·만료·미등록이면 데모가 끊기지 않도록 샘플 데이터로 우회한다.
+                self.fallback_notice = f"{exc.message} 샘플 데이터로 대체해 진행합니다."
+                self.kipris.offline = True
+                patents = self.search_prior_art(queries, max_results=max_results)
             else:
                 raise
 
         assessments = self.assess_similarity(invention, patents) if patents else []
         summary = self.summarize_risk(assessments, patents)
         summary.invention_id = invention.invention_id
+        if self.fallback_notice:
+            summary.message = (self.fallback_notice + " " + summary.message).strip()
+            summary.is_sample = True
         return summary
 
     # ─── 내부 ──────────────────────────────────────────

@@ -55,4 +55,5 @@ class KiprisError(PatentAgentError):
     E6001: Service Key 미설정   E6004: XML 파싱 실패
     E6002: 인증 실패            E6005: 검색 결과 0건 (정보성)
     E6003: 호출 한도 초과       E6006: 타임아웃
+    E6007: 키 사용 기간 만료
     """
