@@ -230,3 +230,24 @@ def test_report_without_prior_art_marks_not_performed():
     report = ReportBuilder().build_disclosure(structure, None, None)
     assert "선행기술 조사 미실시" in report.report_markdown
     assert report.prior_art_included is False
+
+
+def test_prior_art_table_escapes_pipe_in_applicant():
+    """KIPRIS는 복수 출원인을 '|'로 구분해 주므로 표 셀이 깨지지 않아야 한다."""
+    from core.reporter import ReportBuilder
+    from patent.schemas import PatentDocument, PriorArtSummary
+
+    summary = PriorArtSummary(
+        patents=[
+            PatentDocument(
+                application_number="1020230171342",
+                invention_title="하이브리드 V2X기반 화물운송시스템",
+                applicant_name="주식회사 글로벌엔씨|주식회사 아이티텔레콤",
+                application_date="2023-11-30",
+            )
+        ]
+    )
+    table = ReportBuilder().render_prior_art_table(summary)
+    row = [line for line in table.splitlines() if "1020230171342" in line][0]
+    assert row.count("|") == 6  # 5개 열 → 경계 파이프 6개
+    assert "글로벌엔씨, 주식회사 아이티텔레콤" in row

@@ -76,12 +76,18 @@ class ReportBuilder:
         for patent in prior_art.patents[:limit]:
             assessment = prior_art.assessment_for(patent.application_number)
             score = f"{assessment.similarity_score:.2f}" if assessment else "-"
-            title = (patent.invention_title or "")[:40]
+            title = self._cell((patent.invention_title or "")[:40])
+            applicant = self._cell(patent.applicant_name)
             rows.append(
-                f"| {patent.application_number} | {title} | {patent.applicant_name} "
+                f"| {patent.application_number} | {title} | {applicant} "
                 f"| {patent.application_date} | {score} |"
             )
         return header + "\n" + "\n".join(rows)
+
+    @staticmethod
+    def _cell(text: str) -> str:
+        """마크다운 표 셀 값 정리. KIPRIS는 복수 출원인을 '|'로 구분해 주므로 셀이 깨진다."""
+        return (text or "").replace("|", ", ").replace("\n", " ").strip()
 
     def export_docx(self, report: DisclosureReport) -> bytes:
         """마크다운 초안을 간단한 DOCX로 변환 (Nice-to-Have)."""
