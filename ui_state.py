@@ -16,6 +16,7 @@ STAGES = [
     "structure",
     "queries",
     "prior_art",
+    "disclosure_detail",
     "report",
 ]
 
@@ -35,6 +36,7 @@ _DEFAULTS = {
     "queries": None,
     "prior_art": None,
     "report": None,
+    "disclosure_detail": None,
     "github_rate_limit": None,
     "github_files": None,
     "github_revisions": None,

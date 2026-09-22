@@ -99,7 +99,7 @@ def test_full_pipeline_github_to_report(orchestrator):
 
     # 신고서
     report = result.reports[0]
-    assert "## 9. 선행기술 조사 결과" in report.report_markdown
+    assert "## 10. 선행기술 조사 결과" in report.report_markdown
     assert "1020210012345" in report.report_markdown
     assert "샘플 데이터" in report.report_markdown
     assert report.prior_art_included is True

@@ -61,6 +61,8 @@ if st.button("🔄 편집 내용 반영", type="primary"):
                 prior_art,
                 inventor_name=inventor_name,
                 inventor_affiliation=inventor_affiliation,
+                detail=st.session_state.get("disclosure_detail"),
+                documents=list(st.session_state.get("documents") or []),
             )
             st.session_state.report = report
             st.success("반영되었습니다.")

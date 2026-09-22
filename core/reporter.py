@@ -5,7 +5,8 @@ import io
 from datetime import datetime
 
 from config import settings
-from db.models import DisclosureReport, InventionStructure, SearchQueries
+from core.elaborator import DisclosureDetail
+from db.models import Document, DisclosureReport, InventionStructure, SearchQueries
 from exceptions import ReportError
 from patent.schemas import PriorArtSummary
 
@@ -23,12 +24,16 @@ class ReportBuilder:
         prior_art: PriorArtSummary | None = None,
         inventor_name: str = "",
         inventor_affiliation: str = "",
+        detail: DisclosureDetail | None = None,
+        documents: list[Document] | None = None,
     ) -> DisclosureReport:
         if not invention or not invention.problem:
             raise ReportError("발명 구조 정보가 비어 있습니다.", "E5002")
 
         queries = queries or SearchQueries(invention_id=invention.invention_id)
+        detail = detail or DisclosureDetail()
         sections = {
+            "document_no": f"IDF-{invention.invention_id[:8].upper()}",
             "title": invention.title or "(제목 없음)",
             "technical_field": invention.technical_field,
             "background_art": invention.background_art,
@@ -47,6 +52,9 @@ class ReportBuilder:
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
         }
         sections.update(self._prior_art_fields(prior_art))
+        sections.update(self._patentability_fields(invention))
+        sections.update(self._detail_fields(detail, invention))
+        sections["evidence"] = self._evidence(documents, prior_art)
 
         template = self._load_template()
         try:
@@ -83,6 +91,74 @@ class ReportBuilder:
                 f"| {patent.application_date} | {score} |"
             )
         return header + "\n" + "\n".join(rows)
+
+    # ─── 확장 항목 렌더링 ──────────────────────────────
+    @staticmethod
+    def _patentability_fields(invention: InventionStructure) -> dict:
+        score = invention.patentability
+        return {
+            "novelty": score.novelty or "-",
+            "novelty_reasoning": score.novelty_reasoning or "-",
+            "inventive_step": score.inventive_step or "-",
+            "inventive_step_reasoning": score.inventive_step_reasoning or "-",
+            "industrial_applicability": score.industrial_applicability or "-",
+            "industrial_applicability_reasoning": score.industrial_applicability_reasoning or "-",
+        }
+
+    def _detail_fields(self, detail: DisclosureDetail, invention: InventionStructure) -> dict:
+        if detail.components:
+            rows = ["| # | 구성요소 | 기능 | 세부 동작 |", "|---|----------|------|-----------|"]
+            for index, component in enumerate(detail.components, start=1):
+                rows.append(
+                    f"| {index} | {self._cell(component.name)} | {self._cell(component.function)} "
+                    f"| {self._cell(component.detail)} |"
+                )
+            components_table = "\n".join(rows)
+        else:
+            components_table = "_구성요소 상세는 생성되지 않았습니다._"
+
+        dependent = "\n\n".join(
+            f"**청구항 {index}** {claim}"
+            for index, claim in enumerate(detail.claims_dependent, start=2)
+        ) or "_종속항 초안이 생성되지 않았습니다._"
+
+        default_issues = "- 실험 데이터 보강 및 재현성 확인\n- 권리범위(청구항) 변리사 검토"
+        return {
+            "title_en": detail.title_en or "-",
+            "purpose": detail.purpose or invention.problem,
+            "components_table": components_table,
+            "operation_steps": "\n".join(detail.operation)
+            or "_동작 순서가 생성되지 않았습니다._",
+            "embodiment": detail.embodiment or "_실시예가 생성되지 않았습니다._",
+            "claim_independent": detail.claim_independent or "_청구항 초안이 생성되지 않았습니다._",
+            "claims_dependent": dependent,
+            "applications": "\n".join(f"- {item}" for item in detail.applications) or "-",
+            "open_issues": "\n".join(f"- {item}" for item in detail.open_issues) or default_issues,
+        }
+
+    @staticmethod
+    def _evidence(documents: list[Document] | None, prior_art: PriorArtSummary | None) -> str:
+        """분석에 사용한 소스 리비전과 선행기술 링크를 남긴다."""
+        lines = []
+        for document in documents or []:
+            source = document.source
+            if not source:
+                continue
+            label = "이전 버전" if document.version == 1 else "변경 버전"
+            ref = (source.source_ref or "")[:12]
+            entry = f"- **{label}**: `{source.source_path}` @ `{ref}`"
+            if source.source_url:
+                entry += f" ([소스 보기]({source.source_url}))"
+            lines.append(entry)
+
+        if prior_art and prior_art.patents:
+            lines.append("- **선행기술 원문**:")
+            for patent in prior_art.patents[:3]:
+                lines.append(
+                    f"  - [{patent.application_number}]({patent.kipris_url}) "
+                    f"{patent.invention_title[:40]}"
+                )
+        return "\n".join(lines) or "_근거 자료가 기록되지 않았습니다._"
 
     @staticmethod
     def _cell(text: str) -> str:

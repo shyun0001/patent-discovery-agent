@@ -278,8 +278,85 @@ class PromptManager:
         return SEARCH_QUERY_PROMPT.format(invention_structure_json=_json(structure))
 
     @staticmethod
+    def build_disclosure_detail_prompt(structure: dict, prior_art: dict) -> str:
+        return DISCLOSURE_DETAIL_PROMPT.format(
+            invention_structure_json=_json(structure),
+            prior_art_json=_json(prior_art),
+        )
+
+    @staticmethod
     def build_prior_art_similarity_prompt(structure: dict, patents: list[dict]) -> str:
         return PRIOR_ART_SIMILARITY_PROMPT.format(
             invention_structure_json=_json(structure),
             patent_abstracts_json=_json(patents),
         )
+
+
+DISCLOSURE_DETAIL_PROMPT = """[시스템]
+당신은 한국 특허 명세서 작성 전문가이자 변리사입니다.
+구조화된 발명 정보를 발명신고서 수준으로 상세화합니다.
+
+[지시]
+아래 발명 정보를 바탕으로 발명신고서에 들어갈 상세 항목을 작성하세요.
+선행기술 조사 결과가 주어지면, 그와 차별화되는 구성을 부각해 작성하세요.
+
+## 작성 규칙
+
+### 영문 명칭 (title_en)
+- 특허 문헌에서 쓰는 표현으로 번역 ("Method and Apparatus for ~" 형태)
+
+### 발명의 목적 (purpose)
+- "본 발명의 목적은 ~하는 데 있다" 형식, 2~3문장
+
+### 구성요소 (components)
+- 발명을 이루는 핵심 구성요소 3~6개
+- 각 항목: name(구성요소명), function(역할), detail(구체적 동작이나 조건)
+- 명세서 도면 부호를 붙이듯 독립적으로 식별 가능한 단위로 나눌 것
+
+### 동작 설명 (operation)
+- 구성요소들이 어떤 순서로 상호작용하는지 단계별로 서술 (4~6단계)
+- 각 단계는 "(1) ~한다" 형식의 완결된 문장
+
+### 실시예 (embodiment)
+- 구체적 적용 시나리오 1건을 수치·조건과 함께 서술 (4~6문장)
+- 입력 조건, 처리 과정, 결과 지표를 포함
+
+### 청구항 초안 (claims)
+- independent: 독립항 1개. "~에 있어서," 로 시작해 구성요소를 단계별로 나열하고
+  "~하는 것을 특징으로 하는 ~ 방법." 으로 끝낼 것. 실제 청구항 문체를 지킬 것
+- dependent: 종속항 3개. 각각 "제1항에 있어서, ~인 것을 특징으로 하는 ~ 방법." 형식
+- 권리범위가 지나치게 좁아지지 않도록 상위 개념으로 기재할 것
+
+### 활용 분야 (applications)
+- 산업상 적용 가능한 분야 3~4개, 각 한 줄
+
+### 추가 검토 필요 사항 (open_issues)
+- 출원 전 확인이 필요한 사항 2~3개 (데이터 보강, 표준 적합성, 권리범위 등)
+
+## 주의
+- 입력 정보에 없는 수치를 새로 만들어내지 마세요. 주어진 수치만 인용하십시오.
+- 근거가 부족한 항목은 추정임을 문장 안에 드러내세요.
+
+## 발명 정보
+{invention_structure_json}
+
+## 선행기술 조사 결과
+{prior_art_json}
+
+## 출력 형식
+반드시 아래 JSON 형식으로만 응답하세요.
+{{
+  "title_en": "Method and Apparatus for ...",
+  "purpose": "본 발명의 목적은 ...",
+  "components": [
+    {{"name": "정책 수신부", "function": "...", "detail": "..."}}
+  ],
+  "operation": ["(1) ...", "(2) ..."],
+  "embodiment": "...",
+  "claims": {{
+    "independent": "...",
+    "dependent": ["제1항에 있어서, ...", "...", "..."]
+  }},
+  "applications": ["...", "..."],
+  "open_issues": ["...", "..."]
+}}"""

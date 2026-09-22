@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from config import settings
 from core.analyzer import TechChangeAnalyzer
 from core.differ import DiffEngine
+from core.elaborator import DisclosureDetail, DisclosureElaborator
 from core.inventor import InventionExtractor
 from core.parser import DocumentParser
 from core.prior_art import PriorArtAnalyzer
@@ -53,6 +54,7 @@ class PipelineOrchestrator:
         self.inventor = InventionExtractor(self.llm)
         self.searcher = SearchQueryGenerator(self.llm)
         self.prior_art = PriorArtAnalyzer(llm_client=self.llm)
+        self.elaborator = DisclosureElaborator(self.llm)
         self.reporter = ReportBuilder()
 
     # ─── A6: 문서 수집 ─────────────────────────────────
@@ -160,7 +162,13 @@ class PipelineOrchestrator:
             repository.save_similarity_assessment(assessment, structure.invention_id)
         return summary
 
-    # ─── A14: 신고서 ───────────────────────────────────
+    # ─── A14: 신고서 상세화 & 작성 ─────────────────────
+    def elaborate_disclosure(
+        self, structure: InventionStructure, prior_art: PriorArtSummary | None = None
+    ) -> DisclosureDetail:
+        """구성요소·동작·실시예·청구항 초안을 LLM 1회 호출로 생성한다."""
+        return self.elaborator.elaborate(structure, prior_art)
+
     def build_report(
         self,
         structure: InventionStructure,
@@ -168,6 +176,8 @@ class PipelineOrchestrator:
         prior_art: PriorArtSummary | None = None,
         inventor_name: str = "",
         inventor_affiliation: str = "",
+        detail: DisclosureDetail | None = None,
+        documents: list[Document] | None = None,
     ) -> DisclosureReport:
         report = self.reporter.build_disclosure(
             structure,
@@ -175,6 +185,8 @@ class PipelineOrchestrator:
             prior_art,
             inventor_name=inventor_name,
             inventor_affiliation=inventor_affiliation,
+            detail=detail,
+            documents=documents,
         )
         repository.save_disclosure_report(report)
         return report
@@ -206,7 +218,10 @@ class PipelineOrchestrator:
             prior_art = self.search_prior_art(
                 structure, queries, max_results=settings.KIPRIS_MAX_RESULTS, query_id=queries.id
             )
-            report = self.build_report(structure, queries, prior_art)
+            detail = self.elaborate_disclosure(structure, prior_art)
+            report = self.build_report(
+                structure, queries, prior_art, detail=detail, documents=result.documents
+            )
             result.structures.append(structure)
             result.queries.append(queries)
             result.prior_art.append(prior_art)

@@ -128,8 +128,18 @@ st.divider()
 col_go, col_skip = st.columns(2)
 if col_go.button("📋 발명신고서 생성", type="primary"):
     try:
-        with st.spinner("발명신고서 초안을 만드는 중입니다..."):
-            report = pipeline().build_report(structure, queries, st.session_state.get("prior_art"))
+        orchestrator = pipeline()
+        with st.spinner("구성요소·실시예·청구항 초안을 작성하는 중입니다..."):
+            detail = orchestrator.elaborate_disclosure(structure, st.session_state.get("prior_art"))
+        with st.spinner("발명신고서를 조립하는 중입니다..."):
+            report = orchestrator.build_report(
+                structure,
+                queries,
+                st.session_state.get("prior_art"),
+                detail=detail,
+                documents=list(st.session_state.get("documents") or []),
+            )
+        st.session_state.disclosure_detail = detail
         st.session_state.report = report
         st.success("발명신고서 초안이 생성되었습니다.")
         st.page_link("pages/6_📋_Report.py", label="신고서 보기", icon="📋")
@@ -138,7 +148,9 @@ if col_go.button("📋 발명신고서 생성", type="primary"):
 
 if col_skip.button("건너뛰고 신고서 생성"):
     try:
-        report = pipeline().build_report(structure, queries, None)
+        report = pipeline().build_report(
+            structure, queries, None, documents=list(st.session_state.get("documents") or [])
+        )
         st.session_state.report = report
         st.info("선행기술 조사 없이 신고서를 생성했습니다 (9항은 '미실시'로 표기).")
         st.page_link("pages/6_📋_Report.py", label="신고서 보기", icon="📋")

@@ -216,7 +216,7 @@ def test_report_includes_prior_art_section():
     summary = analyzer.summarize_risk(assessments, patents)
 
     report = ReportBuilder().build_disclosure(structure, queries, summary)
-    assert "## 9. 선행기술 조사 결과" in report.report_markdown
+    assert "## 10. 선행기술 조사 결과" in report.report_markdown
     assert "1020210012345" in report.report_markdown
     assert "G06N 3/08" in report.report_markdown
     assert report.prior_art_included is True
@@ -251,3 +251,97 @@ def test_prior_art_table_escapes_pipe_in_applicant():
     row = [line for line in table.splitlines() if "1020230171342" in line][0]
     assert row.count("|") == 6  # 5개 열 → 경계 파이프 6개
     assert "글로벌엔씨, 주식회사 아이티텔레콤" in row
+
+
+# ─── 신고서 상세화 (구성요소·동작·실시예·청구항) ───────
+DETAIL_RESPONSE = {
+    "title_en": "Method and Apparatus for Adaptive Learning Rate Scheduling",
+    "purpose": "본 발명의 목적은 수렴 속도를 개선하는 데 있다.",
+    "components": [
+        {"name": "학습률 결정부", "function": "코사인 어닐링 적용", "detail": "주기 T마다 갱신"},
+        {"name": "가중치 감쇠 분리부", "function": "정규화 강화", "detail": "AdamW 방식"},
+    ],
+    "operation": ["(1) 초기 학습률을 설정한다.", "(2) 주기마다 학습률을 재상승시킨다."],
+    "embodiment": "모바일 분류 모델에 적용해 수렴 에폭이 120에서 72로 감소하였다.",
+    "claims": {
+        "independent": "신경망 학습 방법에 있어서, ... 하는 것을 특징으로 하는 학습 방법.",
+        "dependent": [
+            "제1항에 있어서, 주기가 가변인 것을 특징으로 하는 학습 방법.",
+            "제1항에 있어서, 워밍업 구간을 포함하는 것을 특징으로 하는 학습 방법.",
+        ],
+    },
+    "applications": ["모바일 AI", "임베디드 비전"],
+    "open_issues": ["장기 안정성 검증 필요"],
+}
+
+
+def _detail():
+    from core.elaborator import DisclosureElaborator
+
+    llm = FakeLLM({"발명신고서 수준으로 상세화": DETAIL_RESPONSE})
+    structure = InventionExtractor(_fake_llm()).structure_invention(
+        InventionPoint(title="테스트 발명", summary="요약")
+    )
+    return structure, DisclosureElaborator(llm).elaborate(structure)
+
+
+def test_elaborator_maps_all_detail_fields():
+    _, detail = _detail()
+    assert detail.title_en.startswith("Method and Apparatus")
+    assert len(detail.components) == 2
+    assert detail.components[0].name == "학습률 결정부"
+    assert len(detail.operation) == 2
+    assert detail.claim_independent.endswith("학습 방법.")
+    assert len(detail.claims_dependent) == 2
+    assert detail.is_empty is False
+
+
+def test_report_renders_expanded_sections():
+    structure, detail = _detail()
+    report = ReportBuilder().build_disclosure(structure, None, None, detail=detail)
+    markdown = report.report_markdown
+
+    for heading in (
+        "## 1. 발명의 명칭",
+        "### 6-1. 주요 구성요소",
+        "### 7-1. 실시예",
+        "## 9. 청구항 초안",
+        "## 11. 특허성 자가평가",
+        "## 13. 근거 자료 (추적성)",
+    ):
+        assert heading in markdown, heading
+    assert "| 1 | 학습률 결정부 |" in markdown
+    assert "**청구항 2**" in markdown
+    assert "Method and Apparatus" in markdown
+    # 특허성 자가평가 표가 구조화 결과를 그대로 인용하는지
+    assert "HIGH" in markdown and "선행기술에서 미발견" in markdown
+
+
+def test_report_degrades_without_detail():
+    """상세화가 실패해도 신고서는 생성되어야 한다."""
+    structure = InventionExtractor(_fake_llm()).structure_invention(
+        InventionPoint(title="테스트 발명", summary="요약")
+    )
+    report = ReportBuilder().build_disclosure(structure, None, None, detail=None)
+    assert "## 9. 청구항 초안" in report.report_markdown
+    assert "_청구항 초안이 생성되지 않았습니다._" in report.report_markdown
+
+
+def test_evidence_section_links_source_revisions():
+    from db.models import Document, SourceRef
+
+    structure, detail = _detail()
+    documents = [
+        Document(
+            project_id="p", filename="report.md", file_type="md", content="x", version=1,
+            source=SourceRef("github", "docs/report.md", "abc123def456", "https://github.com/x/y/blob/abc/report.md"),
+        ),
+        Document(
+            project_id="p", filename="report.md", file_type="md", content="y", version=2,
+            source=SourceRef("github", "docs/report.md", "def456abc789", "https://github.com/x/y/blob/def/report.md"),
+        ),
+    ]
+    report = ReportBuilder().build_disclosure(structure, None, None, detail=detail, documents=documents)
+    assert "**이전 버전**: `docs/report.md` @ `abc123def456`" in report.report_markdown
+    assert "**변경 버전**" in report.report_markdown
+    assert "소스 보기" in report.report_markdown
