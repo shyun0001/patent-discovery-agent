@@ -125,3 +125,21 @@ def test_gdrive_export_map_marks_native_docs():
 
     assert "application/vnd.google-apps.presentation" in _EXPORT_MAP
     assert _EXPORT_MAP["application/vnd.google-apps.document"][0] == "text/plain"
+
+
+# ─── Google OAuth 클라이언트 유형별 redirect 처리 ──────
+@pytest.mark.parametrize(
+    "payload,expected",
+    [
+        ({"web": {"redirect_uris": ["http://localhost:8080"]}}, (8080, False)),
+        ({"web": {"redirect_uris": ["http://localhost:9000/"]}}, (9000, True)),
+        # Desktop app 은 루프백 임의 포트를 허용 → 포트 고정하지 않음
+        ({"installed": {"redirect_uris": ["http://localhost"]}}, (0, True)),
+        # 포트 없는 web 설정도 임의 포트로 처리
+        ({"web": {"redirect_uris": ["https://example.com/callback"]}}, (0, True)),
+    ],
+)
+def test_redirect_target_matches_client_type(payload, expected):
+    from sources.gdrive_connector import GDriveConnector
+
+    assert GDriveConnector._redirect_target(payload) == expected

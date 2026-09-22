@@ -89,7 +89,7 @@ class GDriveConnector(SourceConnector):
                 str(cred_path), scopes=settings.GDRIVE_SCOPES
             )
 
-        # 2) OAuth 클라이언트 시크릿
+        # 2) OAuth 클라이언트 시크릿 (Desktop app "installed" / Web app "web" 모두 지원)
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
         from google_auth_oauthlib.flow import InstalledAppFlow
@@ -105,10 +105,34 @@ class GDriveConnector(SourceConnector):
             flow = InstalledAppFlow.from_client_secrets_file(
                 str(cred_path), settings.GDRIVE_SCOPES
             )
-            creds = flow.run_local_server(port=0)
+            port, trailing_slash = self._redirect_target(payload)
+            # 웹 앱 클라이언트는 등록된 redirect URI와 정확히 일치해야 하므로
+            # 포트와 끝 슬래시를 클라이언트 설정에서 그대로 가져온다.
+            creds = flow.run_local_server(
+                port=port, redirect_uri_trailing_slash=trailing_slash, open_browser=True
+            )
             token_path.parent.mkdir(parents=True, exist_ok=True)
             token_path.write_text(creds.to_json(), encoding="utf-8")
         return creds
+
+    @staticmethod
+    def _redirect_target(payload: dict) -> tuple[int, bool]:
+        """클라이언트 설정의 redirect_uris에서 (포트, 끝 슬래시 여부)를 읽는다.
+
+        Desktop app("installed")은 루프백 임의 포트를 허용하므로 0을 돌려준다.
+        """
+        from urllib.parse import urlparse
+
+        web = payload.get("web")
+        if not web:
+            # Desktop app: 루프백 임의 포트가 허용되므로 포트를 고정하지 않는다.
+            return 0, True
+
+        for uri in web.get("redirect_uris", []):
+            parsed = urlparse(uri)
+            if parsed.hostname in ("localhost", "127.0.0.1") and parsed.port:
+                return parsed.port, uri.endswith("/")
+        return 0, True
 
     # ─── 목록 조회 ─────────────────────────────────────
     def list_targets(self, folder_id: str = "") -> list[DriveFile]:
