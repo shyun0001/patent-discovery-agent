@@ -104,3 +104,24 @@ def test_prior_art_page_shows_results(sample_docs):
     assert not app.exception
     assert any("샘플 데이터" in str(c.value) for c in app.caption)
     assert app.dataframe  # 검색 결과 테이블
+
+
+def test_source_page_warns_when_file_has_single_commit():
+    """커밋이 1개뿐인 파일을 고르면 비교 불가 안내가 떠야 한다."""
+    from sources.base import Revision
+    from sources.github_connector import GitHubConnector
+
+    connector = GitHubConnector(token="ghp_dummy")
+    connector.owner, connector.repo = "shyun0001", "patent_discovery"
+
+    app = _run_page(
+        "pages/1_🔗_Source.py",
+        project_id="proj_x",
+        project_name="테스트",
+        connector=connector,
+        github_files=["projects/a/07_completion/final_technical_report.md"],
+        github_revisions=[Revision(ref="a" * 40, label="docs: 최종 기술보고", path="x")],
+    )
+    assert not app.exception
+    assert any("커밋이 1개뿐" in str(w.value) for w in app.warning)
+    assert any("technical_report.md" in str(w.value) for w in app.warning)

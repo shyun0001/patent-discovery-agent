@@ -106,7 +106,15 @@ with github_tab:
                 show_error(exc)
 
         revisions = st.session_state.get("github_revisions")
-        if revisions:
+        if revisions is not None and len(revisions) < 2:
+            st.warning(
+                f"이 파일은 커밋이 {len(revisions)}개뿐이라 비교할 수 없습니다. "
+                "한 번만 추가되고 이후 수정되지 않은 파일입니다.\n\n"
+                "버전이 누적되는 파일을 선택해주세요 — 이 데모 저장소에서는 경로가 "
+                "`/technical_report.md` 로 끝나는 파일이 커밋 8개를 가집니다 "
+                "(`final_technical_report.md` 는 커밋 1개이므로 비교 대상이 아닙니다)."
+            )
+        elif revisions:
             st.dataframe(
                 [
                     {
