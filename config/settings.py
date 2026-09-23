@@ -33,6 +33,8 @@ FIXTURES_DIR = BASE_DIR / "tests" / "fixtures"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 MODEL_PRIMARY = os.getenv("OPENAI_MODEL_PRIMARY", "gpt-4o")
 MODEL_SECONDARY = os.getenv("OPENAI_MODEL_SECONDARY", "gpt-4o-mini")
+# 발명신고서 본문은 최종 산출물이라 품질을 우선한다 (1회만 호출)
+MODEL_REPORT = os.getenv("OPENAI_MODEL_REPORT", "gpt-4o")
 LLM_MAX_RETRIES = 3
 LLM_TIMEOUT = 60
 

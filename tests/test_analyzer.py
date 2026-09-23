@@ -345,3 +345,127 @@ def test_evidence_section_links_source_revisions():
     assert "**이전 버전**: `docs/report.md` @ `abc123def456`" in report.report_markdown
     assert "**변경 버전**" in report.report_markdown
     assert "소스 보기" in report.report_markdown
+
+
+# ─── LLM 작성 신고서 (사용자 제공 프롬프트) ────────────
+DRAFT_MARKDOWN = """# 1. 발명의 명칭
+
+정책 버전 검증과 서비스 타입별 무선접속기술 매핑을 이용한 메시지 전송 방법
+
+# 2. 발명의 핵심 요약
+
+- 기술적 문제: 단일 RAT 고정 정책에서 지연과 전송 실패가 증가한다.
+- 핵심 기술적 구성: 정책 버전 검증부, 서비스 타입 분류부, RAT 후보 평가부
+
+# 6. 핵심 기술적 구성
+
+| 번호 | 기술적 구성 | 필수/선택 | 기능 및 동작 | 다른 구성과의 관계 | 입력 근거 |
+|---|---|---|---|---|---|
+| 1 | 정책 수신부 | 필수 | 정책 수신 | 분류부에 전달 | `technical_report.md` 설계 구간 |
+
+# 11. 검토용 청구항 초안
+
+독립항: ... 하는 것을 특징으로 하는 방법. (근거: `technical_report.md`)
+
+# 13. 작성 신뢰도 및 한계
+
+직접 확인된 범위는 설계 구간이며, 정량 효과는 [확인 필요]다.
+"""
+
+
+def _structure_with_prior_art():
+    llm = _fake_llm()
+    structure = InventionExtractor(llm).structure_invention(
+        InventionPoint(title="테스트 발명", summary="요약")
+    )
+    queries = SearchQueryGenerator(llm).generate_queries(structure)
+    patents = [
+        PatentDocument(
+            application_number="1020210012345",
+            invention_title="학습률 스케줄링을 이용한 신경망 학습 방법",
+            applicant_name="주식회사 에이아이테크",
+            application_date="2021-01-28",
+            abstract="학습률을 주기적으로 조절한다.",
+        )
+    ]
+    analyzer = PriorArtAnalyzer(llm_client=llm)
+    assessments = analyzer.assess_similarity(structure, patents)
+    return structure, queries, analyzer.summarize_risk(assessments, patents)
+
+
+def test_writer_prompt_includes_real_inputs(sample_docs):
+    """프롬프트의 [입력자료]가 실제 수집 기록으로 채워지는지 확인한다."""
+    from core.differ import DiffEngine
+    from core.writer import DisclosureWriter
+    from db.models import SourceRef
+
+    old, new = sample_docs
+    old.source = SourceRef("github", "docs/report.md", "abc123def456789", "https://github.com/x/y")
+    old.version = 1
+    new.source = SourceRef("github", "docs/report.md", "def456abc789012", "https://github.com/x/z")
+    new.version = 2
+    diff = DiffEngine().compute_diff(old, new)
+    structure, queries, prior_art = _structure_with_prior_art()
+
+    llm = FakeLLM({})
+    llm.text_response = DRAFT_MARKDOWN
+    writer = DisclosureWriter(llm)
+    draft = writer.write(structure, queries, prior_art, [old, new], diff, "청구항은 방법항만")
+
+    prompt = llm.calls[-1]
+    # 근거로 인용 가능한 식별정보가 프롬프트에 들어갔는가
+    assert "docs/report.md" in prompt
+    assert "abc123def456" in prompt and "def456abc789" in prompt
+    # 실제 연구자료 변경 원문과 선행기술 데이터가 들어갔는가
+    assert "AdamW" in prompt
+    assert "1020210012345" in prompt and "주식회사 에이아이테크" in prompt
+    # 사용자 추가 지시가 전달됐는가
+    assert "청구항은 방법항만" in prompt
+    # 근거 위조 방지 지시가 포함됐는가
+    assert "근거 위치 미확인" in prompt
+    assert draft.markdown.startswith("# 1. 발명의 명칭")
+
+
+def test_writer_marks_prior_art_absent():
+    from core.writer import DisclosureWriter
+
+    structure, queries, _ = _structure_with_prior_art()
+    llm = FakeLLM({})
+    llm.text_response = DRAFT_MARKDOWN
+    DisclosureWriter(llm).write(structure, queries, None, None, None)
+    assert "선행기술 조사 미실시" in llm.calls[-1]
+
+
+def test_build_from_draft_keeps_body_and_adds_evidence():
+    from db.models import Document, SourceRef
+
+    structure, queries, prior_art = _structure_with_prior_art()
+    documents = [
+        Document(
+            project_id="p", filename="report.md", file_type="md", content="x", version=1,
+            source=SourceRef("github", "docs/report.md", "abc123def456", "https://github.com/x/y"),
+        )
+    ]
+    report = ReportBuilder().build_from_draft(
+        structure, DRAFT_MARKDOWN, queries, prior_art, documents
+    )
+    markdown = report.report_markdown
+
+    # LLM 본문은 그대로 유지
+    assert "# 6. 핵심 기술적 구성" in markdown
+    assert "# 13. 작성 신뢰도 및 한계" in markdown
+    # 시스템이 보증하는 머리말·부록
+    assert markdown.startswith("# 발명신고서 (Invention Disclosure)")
+    assert "IDF-" in markdown
+    assert "## 부록 A. 분석 근거" in markdown
+    assert "`docs/report.md` @ `abc123def456`" in markdown
+    assert "1020210012345" in markdown
+    assert report.sections["body"] == DRAFT_MARKDOWN.strip()
+
+
+def test_build_from_draft_rejects_empty_body():
+    from exceptions import ReportError
+
+    structure, _, _ = _structure_with_prior_art()
+    with pytest.raises(ReportError):
+        ReportBuilder().build_from_draft(structure, "   ")

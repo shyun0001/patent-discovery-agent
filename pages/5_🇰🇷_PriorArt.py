@@ -125,21 +125,25 @@ if summary:
                 st.write(f"- {item}")
 
 st.divider()
+st.text_area(
+    "신고서 작성 시 추가 고려사항 (선택)",
+    key="report_instruction",
+    placeholder="예: 청구항은 방법 청구항만 작성 / 특정 구성은 선택구성으로 분류",
+    height=68,
+)
 col_go, col_skip = st.columns(2)
 if col_go.button("📋 발명신고서 생성", type="primary"):
     try:
         orchestrator = pipeline()
-        with st.spinner("구성요소·실시예·청구항 초안을 작성하는 중입니다..."):
-            detail = orchestrator.elaborate_disclosure(structure, st.session_state.get("prior_art"))
-        with st.spinner("발명신고서를 조립하는 중입니다..."):
-            report = orchestrator.build_report(
+        with st.spinner("발명신고서를 작성하는 중입니다 (구성요소·동작흐름·청구항 초안)..."):
+            report = orchestrator.write_disclosure(
                 structure,
-                queries,
-                st.session_state.get("prior_art"),
-                detail=detail,
+                queries=queries,
+                prior_art=st.session_state.get("prior_art"),
                 documents=list(st.session_state.get("documents") or []),
+                diff=st.session_state.get("diff"),
+                extra_instruction=st.session_state.get("report_instruction", ""),
             )
-        st.session_state.disclosure_detail = detail
         st.session_state.report = report
         st.success("발명신고서 초안이 생성되었습니다.")
         st.page_link("pages/6_📋_Report.py", label="신고서 보기", icon="📋")
@@ -148,8 +152,12 @@ if col_go.button("📋 발명신고서 생성", type="primary"):
 
 if col_skip.button("건너뛰고 신고서 생성"):
     try:
-        report = pipeline().build_report(
-            structure, queries, None, documents=list(st.session_state.get("documents") or [])
+        report = pipeline().write_disclosure(
+            structure,
+            queries=queries,
+            prior_art=None,
+            documents=list(st.session_state.get("documents") or []),
+            diff=st.session_state.get("diff"),
         )
         st.session_state.report = report
         st.info("선행기술 조사 없이 신고서를 생성했습니다 (9항은 '미실시'로 표기).")

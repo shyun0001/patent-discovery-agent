@@ -53,6 +53,8 @@ class FakeLLM:
                 return value
         return {}
 
+    text_response = ""
+
     def call(self, prompt, model=None, temperature=0.1):
         self.calls.append(prompt)
-        return ""
+        return self.text_response

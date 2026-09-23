@@ -69,6 +69,75 @@ class ReportBuilder:
             prior_art_included=bool(prior_art and prior_art.patents),
         )
 
+    def build_from_draft(
+        self,
+        invention: InventionStructure,
+        draft_markdown: str,
+        queries: SearchQueries | None = None,
+        prior_art: PriorArtSummary | None = None,
+        documents: list[Document] | None = None,
+    ) -> DisclosureReport:
+        """LLM이 작성한 본문에 시스템이 보증하는 머리말과 근거 부록만 덧붙인다.
+
+        본문은 손대지 않는다. 부록의 링크·커밋 SHA는 실제 수집 기록에서 생성하므로
+        LLM이 지어낼 수 없는 값이다.
+        """
+        if not draft_markdown.strip():
+            raise ReportError("발명신고서 본문이 비어 있습니다.", "E5002")
+
+        header = self._header(invention, queries, prior_art)
+        appendix = self._appendix(documents, prior_art)
+        markdown = f"{header}\n\n---\n\n{draft_markdown.strip()}\n\n---\n\n{appendix}"
+
+        return DisclosureReport(
+            invention_id=invention.invention_id,
+            report_markdown=markdown,
+            sections={"body": draft_markdown.strip(), "header": header, "appendix": appendix},
+            prior_art_included=bool(prior_art and prior_art.patents),
+        )
+
+    def _header(
+        self,
+        invention: InventionStructure,
+        queries: SearchQueries | None,
+        prior_art: PriorArtSummary | None,
+    ) -> str:
+        ipc = (
+            ", ".join(code.code for code in queries.ipc_codes)
+            if queries and queries.ipc_codes
+            else "-"
+        )
+        risk = prior_art.overall_risk if prior_art and prior_art.patents else _NO_PRIOR_ART
+        return "\n".join(
+            [
+                "# 발명신고서 (Invention Disclosure)",
+                "",
+                "| 항목 | 내용 |",
+                "|------|------|",
+                f"| 문서 번호 | `IDF-{invention.invention_id[:8].upper()}` |",
+                f"| 작성일 | {datetime.now().strftime('%Y-%m-%d %H:%M')} |",
+                f"| 기술 분야 | {invention.technical_field or '-'} |",
+                f"| IPC 분류(안) | {ipc} |",
+                f"| 선행기술 위험도 | {risk} |",
+                "| 작성 | Patent Discovery Agent (AI 자동 생성 초안) |",
+            ]
+        )
+
+    def _appendix(
+        self, documents: list[Document] | None, prior_art: PriorArtSummary | None
+    ) -> str:
+        lines = ["## 부록 A. 분석 근거 (시스템 자동 기록)", "", self._evidence(documents, prior_art)]
+        lines += [
+            "",
+            "## 부록 B. 문서 성격",
+            "",
+            "- 본 문서는 연구 산출물의 버전 변화를 분석해 자동 생성한 **초안**입니다.",
+            "- 선행기술 조사 결과는 KIPRIS 키워드 검색과 초록 기반 유사도 평가이며, "
+            "**정식 선행기술조사를 대체하지 않습니다.**",
+            "- 출원 여부와 청구범위는 변리사 검토를 거쳐 결정하십시오.",
+        ]
+        return "\n".join(lines)
+
     def render_markdown(self, report: DisclosureReport) -> str:
         return report.report_markdown
 

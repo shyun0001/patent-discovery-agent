@@ -10,6 +10,7 @@ from config import settings
 from core.analyzer import TechChangeAnalyzer
 from core.differ import DiffEngine
 from core.elaborator import DisclosureDetail, DisclosureElaborator
+from core.writer import DisclosureWriter
 from core.inventor import InventionExtractor
 from core.parser import DocumentParser
 from core.prior_art import PriorArtAnalyzer
@@ -55,6 +56,7 @@ class PipelineOrchestrator:
         self.searcher = SearchQueryGenerator(self.llm)
         self.prior_art = PriorArtAnalyzer(llm_client=self.llm)
         self.elaborator = DisclosureElaborator(self.llm)
+        self.writer = DisclosureWriter(self.llm)
         self.reporter = ReportBuilder()
 
     # ─── A6: 문서 수집 ─────────────────────────────────
@@ -169,6 +171,41 @@ class PipelineOrchestrator:
         """구성요소·동작·실시예·청구항 초안을 LLM 1회 호출로 생성한다."""
         return self.elaborator.elaborate(structure, prior_art)
 
+    def write_disclosure(
+        self,
+        structure: InventionStructure,
+        queries: SearchQueries | None = None,
+        prior_art: PriorArtSummary | None = None,
+        documents: list[Document] | None = None,
+        diff: DiffResult | None = None,
+        extra_instruction: str = "",
+    ) -> DisclosureReport:
+        """LLM이 발명신고서 본문을 작성하고, 시스템이 머리말·근거 부록을 덧붙인다.
+
+        LLM 작성이 실패하면 구조화 결과만으로 만드는 템플릿 신고서로 폴백한다.
+        """
+        from exceptions import LLMError
+
+        try:
+            draft = self.writer.write(
+                structure,
+                queries=queries,
+                prior_art=prior_art,
+                documents=documents,
+                diff=diff,
+                extra_instruction=extra_instruction,
+            )
+            report = self.reporter.build_from_draft(
+                structure, draft.markdown, queries, prior_art, documents
+            )
+        except LLMError:
+            detail = self.elaborate_disclosure(structure, prior_art)
+            report = self.reporter.build_disclosure(
+                structure, queries, prior_art, detail=detail, documents=documents
+            )
+        repository.save_disclosure_report(report)
+        return report
+
     def build_report(
         self,
         structure: InventionStructure,
@@ -218,9 +255,12 @@ class PipelineOrchestrator:
             prior_art = self.search_prior_art(
                 structure, queries, max_results=settings.KIPRIS_MAX_RESULTS, query_id=queries.id
             )
-            detail = self.elaborate_disclosure(structure, prior_art)
-            report = self.build_report(
-                structure, queries, prior_art, detail=detail, documents=result.documents
+            report = self.write_disclosure(
+                structure,
+                queries=queries,
+                prior_art=prior_art,
+                documents=result.documents,
+                diff=result.diff,
             )
             result.structures.append(structure)
             result.queries.append(queries)

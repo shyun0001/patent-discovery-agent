@@ -3,7 +3,7 @@ import streamlit as st
 
 from core.reporter import ReportBuilder
 from exceptions import PatentAgentError
-from ui_state import init_state, show_error
+from ui_state import init_state, pipeline, show_error
 
 st.set_page_config(page_title="발명신고서", page_icon="📋", layout="wide")
 init_state()
@@ -20,58 +20,62 @@ structure = st.session_state.get("structure")
 queries = st.session_state.get("queries")
 prior_art = st.session_state.get("prior_art")
 
-if report.prior_art_included:
-    st.success("✅ 선행기술 조사 결과가 포함된 초안입니다.")
-else:
-    st.info("ℹ️ 선행기술 조사 없이 생성된 초안입니다 (9항: 미실시).")
+col_a, col_b, col_c = st.columns(3)
+col_a.metric("문서 분량", f"{len(report.report_markdown):,}자")
+col_b.metric("선행기술 포함", "예" if report.prior_art_included else "아니오")
+col_c.metric("섹션 수", sum(1 for line in report.report_markdown.splitlines() if line.startswith("# ")))
 
-col_name, col_affiliation = st.columns(2)
-inventor_name = col_name.text_input("발명자 성명", value=report.sections.get("inventor_name", ""))
-inventor_affiliation = col_affiliation.text_input(
-    "소속", value=report.sections.get("inventor_affiliation", "")
-)
+if not report.prior_art_included:
+    st.info("ℹ️ 선행기술 조사 없이 생성된 초안입니다 (8항 선행기술 비교는 생략됩니다).")
 
-st.subheader("섹션 편집")
-edited = {}
-editable = [
-    ("title", "1. 발명의 명칭", 68),
-    ("technical_field", "2. 기술 분야", 68),
-    ("background_art", "3. 배경 기술", 120),
-    ("problem", "4. 해결하고자 하는 과제", 140),
-    ("solution_means", "5. 과제 해결 수단", 180),
-    ("effect", "6. 발명의 효과", 140),
-    ("summary", "7. 발명의 상세한 설명", 140),
-]
-for key, label, height in editable:
-    edited[key] = st.text_area(label, value=report.sections.get(key, ""), height=height)
+tab_view, tab_edit = st.tabs(["미리보기", "본문 편집"])
 
-if st.button("🔄 편집 내용 반영", type="primary"):
-    try:
-        if structure:
-            structure.title = edited["title"]
-            structure.technical_field = edited["technical_field"]
-            structure.background_art = edited["background_art"]
-            structure.problem = edited["problem"]
-            structure.solution_means = edited["solution_means"]
-            structure.effect = edited["effect"]
-            structure.summary = edited["summary"]
-            report = ReportBuilder().build_disclosure(
-                structure,
-                queries,
-                prior_art,
-                inventor_name=inventor_name,
-                inventor_affiliation=inventor_affiliation,
-                detail=st.session_state.get("disclosure_detail"),
-                documents=list(st.session_state.get("documents") or []),
-            )
-            st.session_state.report = report
-            st.success("반영되었습니다.")
-    except PatentAgentError as exc:
-        show_error(exc)
+with tab_view:
+    st.markdown(report.report_markdown)
 
-st.divider()
-st.subheader("미리보기")
-st.markdown(report.report_markdown)
+with tab_edit:
+    st.caption(
+        "LLM이 작성한 본문을 직접 수정할 수 있습니다. 머리말과 부록(근거 기록)은 "
+        "시스템이 자동 생성하므로 편집 대상이 아닙니다."
+    )
+    body = st.text_area(
+        "본문 (마크다운)",
+        value=report.sections.get("body", report.report_markdown),
+        height=520,
+        label_visibility="collapsed",
+    )
+
+    col_apply, col_regen = st.columns(2)
+    if col_apply.button("✏️ 편집 내용 반영", type="primary", use_container_width=True):
+        try:
+            if structure:
+                st.session_state.report = ReportBuilder().build_from_draft(
+                    structure,
+                    body,
+                    queries,
+                    prior_art,
+                    list(st.session_state.get("documents") or []),
+                )
+                st.success("반영되었습니다.")
+                st.rerun()
+        except PatentAgentError as exc:
+            show_error(exc)
+
+    if col_regen.button("🔄 다시 작성 (LLM 재호출)", use_container_width=True):
+        try:
+            with st.spinner("발명신고서를 다시 작성하는 중입니다..."):
+                st.session_state.report = pipeline().write_disclosure(
+                    structure,
+                    queries=queries,
+                    prior_art=prior_art,
+                    documents=list(st.session_state.get("documents") or []),
+                    diff=st.session_state.get("diff"),
+                    extra_instruction=st.session_state.get("report_instruction", ""),
+                )
+            st.success("다시 작성했습니다.")
+            st.rerun()
+        except PatentAgentError as exc:
+            show_error(exc)
 
 st.divider()
 col_md, col_docx = st.columns(2)
