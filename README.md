@@ -3,6 +3,16 @@
 연구 산출물(GitHub 커밋, 연구보고서, PT 등)의 **버전 간 변화**를 분석해 잠재 발명을 찾아내고,
 **KIPRIS 선행기술 검색**까지 이어 **발명신고서 초안**을 자동 생성하는 AI Agent입니다.
 
+> 2026 AID-X 해커톤 출품작
+
+| 링크 | 설명 |
+|------|------|
+| [프로젝트 노션](https://app.notion.com/p/2026-AID-X-3e2801e2dcae801bbdfde7913cf6db40) | 기획 배경, 문제 정의, 진행 기록 |
+| [데모 데이터 저장소](https://github.com/shyun0001/patent_discovery) | 에이전트가 **분석하는 대상** — 40개 연구 프로젝트가 연구 단계별 8개 커밋으로 누적 |
+| [변경 이력](CHANGELOG.md) | 개발 과정에서의 주요 변경과 수정 내역 |
+
+![메인 화면](main.png)
+
 ```
 GitHub 커밋 / Drive 리비전 2개 선택
         ↓  (자동 수집 — 수동 업로드 없음)
@@ -71,13 +81,43 @@ streamlit run app.py
 | 5 🇰🇷 PriorArt | KIPRIS 검색 결과, 유사도·중복/차별점, 종합 위험도 |
 | 6 📋 Report | 13개 섹션 발명신고서 초안 (본문 편집·재작성·다운로드) |
 
+## 데모 데이터
+
+에이전트가 분석할 연구 산출물은 별도 저장소에 있습니다 —
+**[shyun0001/patent_discovery](https://github.com/shyun0001/patent_discovery)**
+
+- 통신·배터리·반도체·바이오 4개 분야 **40개 연구 프로젝트** (합성 데이터)
+- 각 프로젝트의 산출물이 연구 진행 단계에 따라 **8개 커밋**으로 나뉘어 있습니다
+  (`00_initiation` → `01_planning` → ... → `07_completion`)
+- 각 프로젝트 폴더의 `technical_report.md` 가 커밋마다 내용이 누적되는 **비교 대상** 문서입니다
+- 평가용 정답 데이터(`_ground_truth`)는 공정성을 위해 저장소에 포함하지 않았습니다
+
+| 커밋 | 단계 | 추가되는 산출물 |
+|------|------|-----------------|
+| 1 | 00_initiation | 문제 정의, 선행 관찰 |
+| 2 | 01_planning | 연구계획, 요구조건, 시료·장비 목록 |
+| 3 | 02_meetings | 착수·설계검토·이슈검토 회의록 |
+| 4 | 03_design | 프로토타입 상세 설계, 시험 매트릭스, 위험관리 |
+| 5 | 04_experiments | 기준선 → 1·2차 반복 → 독립 검증 |
+| 6 | 05_data | 실험 원자료(csv), 실행 메타데이터 |
+| 7 | 06_analysis | 분석 코드, 결과 해석 |
+| 8 | 07_completion | 최종 기술보고, 이관 기록 |
+
 ## 데모 시나리오
 
-1. 데모 저장소에 `tests/fixtures/sample_v1.md`를 커밋한 뒤, `sample_v2.md` 내용으로 수정해 두 번째 커밋을 만듭니다.
-2. 1 🔗 Source에서 저장소를 연결하고 해당 파일의 커밋 2개를 선택 → "가져와서 비교 시작".
-3. 3 🧠 Analysis에서 `algorithm` 유형의 변화(옵티마이저 교체 + 코사인 어닐링)를 선택 → 발명 포인트 도출.
-4. 5 🇰🇷 PriorArt에서 KIPRIS 검색 → 유사도 0.7 내외의 선행문헌과 차별점 확인.
-5. 6 📋 Report에서 신고서 초안을 확인하고 `.md`로 다운로드.
+1. **1 🔗 Source** — 저장소 `shyun0001/patent_discovery` 연결 후,
+   파일 경로 검색에 `1020180073423` 을 넣고
+   `projects/communication/1020180073423B1(3).pdf/technical_report.md` 를 선택합니다.
+2. 커밋 2개를 고릅니다.
+   - 이전: `docs: 문제 정의와 선행 관찰 기록` (00_initiation)
+   - 변경: `feat: 프로토타입 상세 설계와 시험 매트릭스 확정` (03_design)
+3. **2 🔍 Diff** — 변경률 45.2%, 설계 구간 6개 섹션 추가를 확인하고 기술 변화 분석 실행.
+4. **3 🧠 Analysis** — `algorithm` 유형의 "V2X 서비스 타입 분류 및 RAT 후보 평가 알고리즘 추가"
+   (유의미성 0.85)를 선택 → 발명 포인트 도출.
+5. **4 💡 Invention** — 과제·수단·효과 구조화, 검색어 `V2X 서비스 타입 분류 알고리즘` 생성.
+6. **5 🇰🇷 PriorArt** — KIPRIS 검색 → 한국전자기술연구원 "서비스 맞춤형 V2X 지원 시스템"
+   (유사도 0.60, MEDIUM) 등 국내 특허 5건과 차별점 확인.
+7. **6 📋 Report** — 13개 섹션 발명신고서 초안을 확인하고 `.md` / `.docx` 로 다운로드.
 
 ## 테스트
 
@@ -97,10 +137,10 @@ ui_state.py             세션 상태 및 에러 표시 헬퍼
 pages/                  6개 페이지 (Source → Diff → Analysis → Invention → PriorArt → Report)
 sources/                GitHubConnector, GDriveConnector (SourceConnector 추상화)
 patent/                 KiprisClient, 특허 데이터 모델
-core/                   parser, differ, analyzer, inventor, searcher, prior_art, reporter, pipeline
-llm/                    LLMClient(캐싱·재시도), PromptManager(5개 프롬프트)
+core/                   parser, differ, analyzer, inventor, searcher, prior_art, writer, reporter, pipeline
+llm/                    LLMClient(캐싱·재시도), PromptManager, 발명신고서 작성 프롬프트
 db/                     SQLite 스키마·모델·CRUD
-templates/              발명신고서 양식
+templates/              발명신고서 양식 (LLM 작성 실패 시 폴백용)
 tests/                  단위·파이프라인·페이지 테스트 + fixtures
 ```
 
